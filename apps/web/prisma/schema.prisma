@@ -1,0 +1,119 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  admin
+  viewer
+}
+
+enum NodeStatus {
+  pending
+  online
+  offline
+}
+
+enum JobType {
+  renew
+  delete
+  add
+}
+
+enum JobStatus {
+  queued
+  running
+  succeeded
+  failed
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  role         Role     @default(viewer)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Node {
+  id              String       @id @default(cuid())
+  name            String
+  hostname        String?
+  status          NodeStatus   @default(pending)
+  agentVersion    String?
+  lastHeartbeatAt DateTime?
+  tokenHash       String
+  enrollmentUsed  Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  certificates    Certificate[]
+  jobs            Job[]
+}
+
+model Certificate {
+  id           String   @id @default(cuid())
+  nodeId       String
+  node         Node     @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  lineageName  String
+  primaryDomain String
+  domains      String
+  notBefore    DateTime?
+  notAfter     DateTime?
+  lastSeenAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([nodeId, lineageName])
+  @@index([notAfter])
+}
+
+model Job {
+  id          String    @id @default(cuid())
+  nodeId      String
+  node        Node      @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  type        JobType
+  status      JobStatus @default(queued)
+  payload     String    @default("{}")
+  log         String    @default("")
+  createdById String?
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([nodeId, status])
+}
+
+model Setting {
+  id        String   @id @default("default")
+  publicBaseUrl String?
+  smtpHost  String?
+  smtpPort  Int?
+  smtpUser  String?
+  smtpPass  String?
+  smtpFrom  String?
+  smtpTls   Boolean  @default(true)
+  webhookUrl String?
+  warnDaysBeforeExpiry Int @default(14)
+  overdueDays          Int @default(2)
+  notifyOnJobFailure   Boolean @default(true)
+  notifyOnNodeOffline  Boolean @default(true)
+  updatedAt DateTime @updatedAt
+}
+
+model NotificationLog {
+  id        String   @id @default(cuid())
+  eventKey  String
+  channel   String
+  message   String
+  createdAt DateTime @default(now())
+
+  @@index([eventKey, createdAt])
+}

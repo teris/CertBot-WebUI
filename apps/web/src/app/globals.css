@@ -1,0 +1,198 @@
+@import "tailwindcss";
+
+/* Admin-UI: fest hell, hoher Kontrast */
+:root {
+  --background: #f1f5f9;
+  --foreground: #0f172a;
+  --muted: #334155;
+  --border: #94a3b8;
+  --card: #ffffff;
+  --primary: #0f172a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+html {
+  color-scheme: light;
+  font-size: 16px;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  font-weight: 500;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.bg-white {
+  color: var(--foreground);
+}
+
+/* Links: Farbe nicht erzwingen — sonst überschreibt das z.B. text-white auf aktivem Nav */
+a {
+  text-decoration: none;
+}
+
+/* Formulare: bewusst dunkel und klar */
+label {
+  color: #1e293b;
+  font-weight: 600;
+}
+
+input,
+select,
+textarea {
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+  border: 1.5px solid #64748b !important;
+  border-radius: 0.375rem;
+  font-weight: 500;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #64748b !important;
+  opacity: 1;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid #0f172a;
+  outline-offset: 1px;
+  border-color: #0f172a !important;
+}
+
+/* Autofill nicht blassgelb/unsichtbar */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #0f172a;
+  box-shadow: 0 0 0 1000px #fffbeb inset;
+  transition: background-color 9999s ease-out;
+}
+
+button {
+  font-weight: 600;
+}
+
+/* Wiederverwendbare UI-Klassen */
+.ui-page-title {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.ui-page-sub {
+  margin-top: 0.35rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.ui-section-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.ui-card {
+  background: #ffffff;
+  color: #0f172a;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.06);
+}
+
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.375rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  background: #0f172a;
+  color: #ffffff !important;
+  border: 1.5px solid #0f172a;
+}
+
+.ui-btn:hover {
+  background: #1e293b;
+}
+
+.ui-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.375rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  background: #ffffff;
+  color: #0f172a !important;
+  border: 1.5px solid #475569;
+}
+
+.ui-btn-secondary:hover {
+  background: #f1f5f9;
+}
+
+.ui-table-wrap {
+  overflow-x: auto;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 0.5rem;
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.ui-table-wrap table {
+  width: 100%;
+  text-align: left;
+  font-size: 0.9rem;
+}
+
+.ui-table-wrap thead {
+  background: #e2e8f0;
+  color: #0f172a !important;
+  font-weight: 700;
+}
+
+.ui-table-wrap thead th {
+  color: #0f172a !important;
+}
+
+.ui-table-wrap th,
+.ui-table-wrap td {
+  padding: 0.65rem 0.75rem;
+  border-bottom: 1px solid #e2e8f0;
+  color: #0f172a;
+}
+
+.ui-table-wrap tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.ui-muted {
+  color: #334155 !important;
+  font-weight: 500;
+}
+
+.ui-link {
+  color: #075985 !important;
+  font-weight: 600;
+}
+
+.ui-link:hover {
+  text-decoration: underline;
+}

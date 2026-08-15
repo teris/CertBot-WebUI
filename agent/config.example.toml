@@ -1,0 +1,9 @@
+# CertBot WebUI Agent configuration
+api_url = "https://your-central-host"
+token = "PASTE_ENROLLMENT_TOKEN"
+inventory_interval = 900
+job_interval = 15
+letsencrypt_live = "/etc/letsencrypt/live"
+certbot_bin = "certbot"
+# Local SQLite (stdlib) — no DB server on the node
+db_path = "/var/lib/certbot-agent/agent.db"

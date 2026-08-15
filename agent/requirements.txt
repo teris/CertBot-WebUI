@@ -1,0 +1,2 @@
+# CertBot WebUI Agent has no pip dependencies.
+# Requires only: python3 (stdlib: sqlite3, urllib) and optionally openssl + certbot.

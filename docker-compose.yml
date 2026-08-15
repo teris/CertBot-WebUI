@@ -1,0 +1,52 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: certbot
+      POSTGRES_PASSWORD: certbot
+      POSTGRES_DB: certbot_webui
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U certbot -d certbot_webui"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+      args:
+        DB_TYPE: postgresql
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://certbot:certbot@db:5432/certbot_webui
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-change-me-docker-secret}
+      INITIAL_ADMIN_EMAIL: ${INITIAL_ADMIN_EMAIL:-admin@localhost}
+      INITIAL_ADMIN_PASSWORD: ${INITIAL_ADMIN_PASSWORD:-changeme}
+      CRON_SECRET: ${CRON_SECRET:-cron-secret}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  notify-cron:
+    image: curlimages/curl:8.5.0
+    environment:
+      CRON_SECRET: ${CRON_SECRET:-cron-secret}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          curl -fsS -H "x-cron-secret: $$CRON_SECRET" http://web:3000/api/notifications/check || true
+          sleep 900
+        done
+    depends_on:
+      - web
+
+volumes:
+  pgdata:

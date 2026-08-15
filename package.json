@@ -1,0 +1,12 @@
+{
+  "name": "certbot-webui-monorepo",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Zentrale Certbot-/Let's-Encrypt-Verwaltung",
+  "scripts": {
+    "dev": "npm --prefix apps/web run dev",
+    "build": "npm --prefix apps/web run build",
+    "start": "npm --prefix apps/web run start",
+    "db:setup": "npm --prefix apps/web run db:setup"
+  }
+}

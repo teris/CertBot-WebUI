@@ -3,6 +3,9 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, requireSession } from "@/lib/session";
 import { generateToken, hashToken } from "@/lib/tokens";
+import { agentNeedsUpdate } from "@/lib/agent-version";
+import { getBundledAgentVersion } from "@/lib/agent-version.server";
+import { getSettings, offlineAfterMs } from "@/lib/notifications";
 
 export async function GET() {
   const { error } = await requireSession();
@@ -13,7 +16,9 @@ export async function GET() {
     include: { _count: { select: { certificates: true } } },
   });
 
-  const cutoff = new Date(Date.now() - 20 * 60 * 1000);
+  const settings = await getSettings();
+  const cutoff = new Date(Date.now() - offlineAfterMs(settings.offlineAfterMinutes));
+  const latestAgentVersion = getBundledAgentVersion();
   const enriched = nodes.map((n) => {
     let status = n.status;
     if (n.enrollmentUsed && (!n.lastHeartbeatAt || n.lastHeartbeatAt < cutoff)) {
@@ -29,10 +34,11 @@ export async function GET() {
       enrollmentUsed: n.enrollmentUsed,
       certificateCount: n._count.certificates,
       createdAt: n.createdAt,
+      updateAvailable: n.enrollmentUsed && agentNeedsUpdate(n.agentVersion, latestAgentVersion),
     };
   });
 
-  return NextResponse.json({ nodes: enriched });
+  return NextResponse.json({ nodes: enriched, latestAgentVersion });
 }
 
 const createSchema = z.object({

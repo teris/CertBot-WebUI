@@ -2,11 +2,23 @@ import { NextResponse } from "next/server";
 import { runNotificationChecks } from "@/lib/notifications";
 import { requireAdmin } from "@/lib/session";
 
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
+async function runSafely() {
+  try {
+    await runNotificationChecks();
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.error("notifications/check failed", e);
+    return NextResponse.json({ ok: false, error: "check failed" }, { status: 500 });
+  }
+}
+
 export async function POST() {
   const { error } = await requireAdmin();
   if (error) return error;
-  await runNotificationChecks();
-  return NextResponse.json({ ok: true });
+  return runSafely();
 }
 
 /** Allow cron with CRON_SECRET header for unattended runs */
@@ -17,6 +29,5 @@ export async function GET(req: Request) {
     const { error } = await requireAdmin();
     if (error) return error;
   }
-  await runNotificationChecks();
-  return NextResponse.json({ ok: true });
+  return runSafely();
 }

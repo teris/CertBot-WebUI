@@ -3,6 +3,9 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, requireSession } from "@/lib/session";
 import { generateToken, hashToken } from "@/lib/tokens";
+import { agentNeedsUpdate } from "@/lib/agent-version";
+import { getBundledAgentVersion } from "@/lib/agent-version.server";
+import { getSettings, offlineAfterMs } from "@/lib/notifications";
 
 export async function GET(
   _req: NextRequest,
@@ -21,13 +24,23 @@ export async function GET(
   });
   if (!node) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const cutoff = new Date(Date.now() - 20 * 60 * 1000);
+  const settings = await getSettings();
+  const cutoff = new Date(Date.now() - offlineAfterMs(settings.offlineAfterMinutes));
   let status = node.status;
   if (node.enrollmentUsed && (!node.lastHeartbeatAt || node.lastHeartbeatAt < cutoff)) {
     status = "offline";
   }
 
-  return NextResponse.json({ node: { ...node, status, tokenHash: undefined } });
+  const latestAgentVersion = getBundledAgentVersion();
+  return NextResponse.json({
+    node: {
+      ...node,
+      status,
+      tokenHash: undefined,
+      updateAvailable: agentNeedsUpdate(node.agentVersion, latestAgentVersion),
+    },
+    latestAgentVersion,
+  });
 }
 
 const patchSchema = z.object({
@@ -60,6 +73,7 @@ export async function PATCH(
     tokenHash?: string;
     enrollmentUsed?: boolean;
     status?: "pending";
+    offlineAlertSent?: boolean;
   } = {};
   if (parsed.data.name) data.name = parsed.data.name;
   if (parsed.data.hostname !== undefined) data.hostname = parsed.data.hostname;
@@ -68,6 +82,7 @@ export async function PATCH(
     data.tokenHash = hashToken(plainToken);
     data.enrollmentUsed = false;
     data.status = "pending";
+    data.offlineAlertSent = false;
   }
 
   const node = await prisma.node.update({ where: { id }, data });

@@ -21,10 +21,42 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-VERSION = "1.2.0"
+VERSION = "1.3.2"
 logger = logging.getLogger("certbot-agent")
 
 _SSL_CTX = ssl.create_default_context()
+
+
+class ApiError(RuntimeError):
+    """Kurzer API-/Netzfehler ohne HTML-Müll und ohne Exception-Chain."""
+
+    def __init__(self, message: str, status: int | None = None, transient: bool = False) -> None:
+        super().__init__(message)
+        self.status = status
+        self.transient = transient
+
+
+def _short_http_detail(code: int, body: str) -> str:
+    text = (body or "").strip()
+    lower = text.lower()
+    if "<html" in lower or "<!doctype" in lower:
+        hints = {
+            401: "nicht autorisiert (Token prüfen)",
+            403: "Zugriff verweigert",
+            404: "API-Pfad nicht gefunden",
+            502: "Dashboard nicht erreichbar (App/nginx down?)",
+            503: "Dashboard vorübergehend nicht verfügbar",
+            504: "Dashboard-Timeout",
+        }
+        return hints.get(code, "HTML-Fehlerseite")
+    try:
+        data = json.loads(text)
+        if isinstance(data, dict) and data.get("error"):
+            return str(data["error"])[:180]
+    except (json.JSONDecodeError, TypeError):
+        pass
+    compact = " ".join(text.split())
+    return (compact[:180] if compact else "ohne Details")
 
 
 def persist_api_url(config_path: str | None, api_url: str) -> None:
@@ -423,7 +455,19 @@ class AgentClient:
                 return json.loads(raw) if raw else {}
         except urllib.error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"HTTP {exc.code} {path}: {detail}") from exc
+            transient = exc.code in (408, 429, 500, 502, 503, 504)
+            raise ApiError(
+                f"{method} {path} → HTTP {exc.code} ({_short_http_detail(exc.code, detail)})",
+                status=exc.code,
+                transient=transient,
+            ) from None
+        except urllib.error.URLError as exc:
+            reason = getattr(exc, "reason", exc)
+            raise ApiError(f"{method} {path} → keine Verbindung ({reason})", transient=True) from None
+        except TimeoutError:
+            raise ApiError(f"{method} {path} → Timeout", transient=True) from None
+        except json.JSONDecodeError:
+            raise ApiError(f"{method} {path} → ungültige JSON-Antwort", transient=True) from None
 
     def enroll(self) -> None:
         try:
@@ -440,7 +484,7 @@ class AgentClient:
             self.apply_api_url(result.get("apiUrl") if isinstance(result, dict) else None)
             self.store.set_meta("enrolled", "1")
         except RuntimeError as exc:
-            if "409" in str(exc):
+            if "409" in str(exc) or (isinstance(exc, ApiError) and exc.status == 409):
                 logger.info("Already enrolled")
                 self.store.set_meta("enrolled", "1")
                 return
@@ -450,7 +494,11 @@ class AgentClient:
         result = self._request(
             "POST",
             "/api/agent/heartbeat",
-            {"hostname": socket.gethostname(), "agentVersion": VERSION},
+            {
+                "hostname": socket.gethostname(),
+                "agentVersion": VERSION,
+                "log": collect_service_log(20),
+            },
         )
         if isinstance(result, dict):
             self.apply_api_url(result.get("apiUrl"))
@@ -501,6 +549,108 @@ class AgentClient:
                 break
 
 
+def collect_service_log(n: int = 20) -> str:
+    """Letzte Journal-Zeilen für das Dashboard."""
+    try:
+        proc = subprocess.run(
+            ["journalctl", "-u", "certbot-agent.service", "-n", str(n), "--no-pager", "-l"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        text = (proc.stdout or "") + (proc.stderr or "")
+        return text[-16000:]
+    except Exception as exc:
+        return f"(Logs nicht lesbar: {exc})\n"
+
+
+AGENT_INSTALL_DIR = os.environ.get("CERTBOT_AGENT_HOME", "/opt/certbot-agent")
+AGENT_SERVICE_PATH = "/etc/systemd/system/certbot-agent.service"
+AGENT_CTL_BIN = "/usr/local/sbin/certbot-agent"
+AGENT_INITD = "/etc/init.d/certbot-agent"
+
+
+def http_get_bytes(url: str) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": f"certbot-agent/{VERSION}"})
+    ctx = _SSL_CTX if url.startswith("https://") else None
+    with urllib.request.urlopen(req, timeout=60, context=ctx) as resp:
+        return resp.read()
+
+
+def schedule_service_restart(delay_sec: float = 2.0) -> None:
+    """Restart after the current job has reported success (process will exit)."""
+    script = f"sleep {delay_sec}; systemctl restart certbot-agent.service"
+    subprocess.Popen(
+        ["bash", "-c", script],
+        start_new_session=True,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+
+def install_ctl_from_bytes(data: bytes) -> None:
+    path = Path(AGENT_CTL_BIN)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".new")
+    tmp.write_bytes(data)
+    tmp.chmod(0o755)
+    tmp.replace(path)
+    initd = Path(AGENT_INITD)
+    initd.write_bytes(data)
+    initd.chmod(0o755)
+
+
+def self_update_from_dashboard(cfg: dict[str, Any], log: Any) -> None:
+    """Download agent files from the dashboard; keep local config/token."""
+    base = str(cfg["api_url"]).rstrip("/")
+    files = [
+        (f"{base}/agent/agent.py", Path(AGENT_INSTALL_DIR) / "agent.py", 0o755),
+        (f"{base}/agent/certbot-agent.service", Path(AGENT_SERVICE_PATH), 0o644),
+        (f"{base}/agent/update.sh", Path(AGENT_INSTALL_DIR) / "update.sh", 0o755),
+    ]
+    Path(AGENT_INSTALL_DIR).mkdir(parents=True, exist_ok=True)
+    ctl_data: bytes | None = None
+    for url, dest, mode in files:
+        log(f"Download {url}\n")
+        data = http_get_bytes(url)
+        if dest.name == "agent.py":
+            text = data.decode("utf-8", errors="replace")
+            if "VERSION" not in text or "def main" not in text:
+                raise RuntimeError("Heruntergeladene agent.py ist ungültig")
+        tmp = dest.with_suffix(dest.suffix + ".new")
+        tmp.write_bytes(data)
+        tmp.chmod(mode)
+        tmp.replace(dest)
+        log(f"OK {dest}\n")
+    ctl_url = f"{base}/agent/certbot-agent-ctl.sh"
+    log(f"Download {ctl_url}\n")
+    ctl_data = http_get_bytes(ctl_url)
+    install_ctl_from_bytes(ctl_data)
+    log(f"OK {AGENT_CTL_BIN} + {AGENT_INITD}\n")
+    subprocess.run(["systemctl", "daemon-reload"], check=False, capture_output=True)
+    try:
+        wrapper = http_get_bytes(f"{base}/agent/service-wrapper.sh")
+        wr = Path("/usr/local/bin/service")
+        if not wr.exists() or "certbot-agent" in wr.read_text(encoding="utf-8", errors="replace"):
+            wr.parent.mkdir(parents=True, exist_ok=True)
+            tmp = wr.with_suffix(".new")
+            tmp.write_bytes(wrapper)
+            tmp.chmod(0o755)
+            tmp.replace(wr)
+            log("OK /usr/local/bin/service\n")
+    except Exception as exc:
+        log(f"Hinweis: service-Wrapper nicht aktualisiert ({exc})\n")
+    ver = VERSION
+    try:
+        text = (Path(AGENT_INSTALL_DIR) / "agent.py").read_text(encoding="utf-8", errors="replace")
+        m = re.search(r'^VERSION\s*=\s*["\']([^"\']+)', text, re.M)
+        if m:
+            ver = m.group(1)
+    except OSError:
+        pass
+    log(f"Update auf Version {ver} vorbereitet.\n")
+
+
 def build_certbot_cmd(cfg: dict[str, Any], job_type: str, payload: dict[str, Any]) -> list[str]:
     bin_ = cfg["certbot_bin"]
     if job_type == "renew":
@@ -545,10 +695,24 @@ def run_job(client: AgentClient, store: LocalStore, cfg: dict[str, Any], job: di
     logger.info("Running job %s (%s)", job_id, job_type)
     store.upsert_job(job_id, job_type, payload, "running", "Starting…\n")
     client.job_status(job_id, "running", log_append=f"Starting {job_type}…\n")
+
+    def log_line(line: str, status: str | None = None) -> None:
+        store.append_job_log(job_id, line, status=status)
+        client.job_status(job_id, status or "running", log_append=line)
+
     try:
+        if job_type == "update":
+            self_update_from_dashboard(cfg, log_line)
+            log_line("Update geschrieben. Dienst wird neu gestartet.\n", status="succeeded")
+            schedule_service_restart()
+            return
+        if job_type == "restart":
+            log_line("Dienst-Neustart wird ausgelöst.\n", status="succeeded")
+            schedule_service_restart()
+            return
+
         cmd = build_certbot_cmd(cfg, job_type, payload)
-        store.append_job_log(job_id, f"$ {' '.join(cmd)}\n")
-        client.job_status(job_id, "running", log_append=f"$ {' '.join(cmd)}\n")
+        log_line(f"$ {' '.join(cmd)}\n")
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -558,23 +722,15 @@ def run_job(client: AgentClient, store: LocalStore, cfg: dict[str, Any], job: di
         )
         assert proc.stdout is not None
         for line in proc.stdout:
-            store.append_job_log(job_id, line)
-            client.job_status(job_id, "running", log_append=line)
+            log_line(line)
         code = proc.wait()
         final = "succeeded" if code == 0 else "failed"
-        store.append_job_log(job_id, f"\nExit code {code}\n", status=final)
-        client.job_status(job_id, final, log_append=f"\nExit code {code}\n")
+        log_line(f"\nExit code {code}\n", status=final)
     except Exception as exc:
-        store.append_job_log(job_id, f"\nERROR: {exc}\n", status="failed")
-        client.job_status(job_id, "failed", log_append=f"\nERROR: {exc}\n")
+        log_line(f"\nERROR: {exc}\n", status="failed")
 
 
 def report_inventory(client: AgentClient, store: LocalStore, cfg: dict[str, Any]) -> None:
-    try:
-        client.heartbeat()
-    except Exception as exc:
-        logger.warning("Heartbeat failed, queued: %s", exc)
-        store.enqueue_outbox("heartbeat", {})
     certs = collect_inventory(cfg)
     store.save_certificates(certs)
     try:
@@ -618,9 +774,19 @@ def main() -> None:
         return
 
     last_inventory = 0.0
+    last_warn_at = 0.0
+    last_warn_msg = ""
     while True:
         try:
             client.flush_outbox()
+            try:
+                client.heartbeat()
+            except ApiError as exc:
+                logger.warning("Heartbeat: %s — späterer Versuch", exc)
+                store.enqueue_outbox("heartbeat", {})
+            except Exception as exc:
+                logger.warning("Heartbeat fehlgeschlagen: %s", exc)
+                store.enqueue_outbox("heartbeat", {})
             now = time.time()
             if now - last_inventory >= cfg["inventory_interval"] or args.once:
                 report_inventory(client, store, cfg)
@@ -629,8 +795,15 @@ def main() -> None:
             for job in jobs:
                 run_job(client, store, cfg, job)
                 last_inventory = 0
+        except ApiError as exc:
+            msg = str(exc)
+            now = time.time()
+            if msg != last_warn_msg or now - last_warn_at >= 120:
+                logger.warning("Zentrale: %s — nächster Versuch in %ss", exc, cfg["job_interval"])
+                last_warn_at = now
+                last_warn_msg = msg
         except Exception as exc:
-            logger.exception("Loop error: %s", exc)
+            logger.error("Unerwarteter Fehler: %s", exc)
 
         if args.once:
             break

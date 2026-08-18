@@ -155,12 +155,35 @@ curl -fsSL "http://DASHBOARD-IP:3000/api/public/agent/install?token=TOKEN" | sud
 
 Die öffentliche URL kommt aus **Einstellungen → Öffentliche Dashboard-URL** bzw. `HTTPS_DOMAIN` / `HTTPS_PORT`. Agents ab Version **1.2.0** übernehmen eine geänderte HTTPS-URL automatisch beim Heartbeat.
 
+### Agent steuern (auf dem Node)
+
+```bash
+sudo service certbot-agent status     # Zustand + Version
+sudo service certbot-agent log        # letzte 20 Logzeilen
+sudo service certbot-agent restart
+sudo service certbot-agent update     # Dateien vom Dashboard neu laden
+```
+
+Gleichwertig: `certbot-agent status|log|restart|update`
+
+### Agent aktualisieren
+
+Im Dashboard unter **Nodes** → **Agent aktualisieren** (ab Agent 1.3.0).  
+Bestehende Agents vor 1.3.0 einmalig auf dem Server:
+
+```bash
+curl -fsSL "https://DASHBOARD/agent/update.sh" | sudo bash
+```
+
+Config und Token bleiben erhalten.
+
 Agent deinstallieren:
 
 ```bash
 # Auf dem Node
 sudo systemctl disable --now certbot-agent.service
-sudo rm -f /etc/systemd/system/certbot-agent.service
+sudo rm -f /etc/systemd/system/certbot-agent.service /usr/local/sbin/certbot-agent /etc/init.d/certbot-agent
+if grep -q certbot-agent /usr/local/bin/service 2>/dev/null; then sudo rm -f /usr/local/bin/service; fi
 sudo rm -rf /opt/certbot-agent /etc/certbot-agent /var/lib/certbot-agent
 sudo systemctl daemon-reload
 # Im Dashboard den Node löschen
@@ -170,11 +193,11 @@ sudo systemctl daemon-reload
 
 ```
 ├── apps/web/          # Next.js Dashboard + Agent-API
-├── agent/             # Python-Agent (Quelle)
+├── agent/             # Python-Agent, update.sh, CLI (status/log/restart)
 ├── deploy/nginx/      # nginx-Template für HTTPS auf Port+1
 ├── docs/screenshots/  # README-Screenshots
-├── install.sh         # Produktion: Installation
-├── update.sh          # Produktion: Update
+├── install.sh         # Produktion: Installation (Dashboard)
+├── update.sh          # Produktion: Update (Dashboard)
 ├── enable-https.sh    # HTTPS nachrüsten
 ├── remove.sh          # Deinstallation
 └── docker-compose.yml
@@ -219,7 +242,7 @@ Cron: `GET /api/notifications/check` mit Header `x-cron-secret: $CRON_SECRET`
 ## Sicherheit
 
 - Node-Tokens werden nur gehasht gespeichert
-- Agent akzeptiert nur Whitelist-Jobtypen (`renew` / `delete` / `add`)
+- Agent akzeptiert nur Whitelist-Jobtypen (`renew` / `delete` / `add` / `update` / `restart`)
 - HTTPS zur Zentrale empfohlen (Port+1)
 - Admin-Passwort und Secrets nach der Installation ändern
 

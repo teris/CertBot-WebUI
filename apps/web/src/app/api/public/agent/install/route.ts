@@ -60,12 +60,24 @@ echo "==> Stoppe ggf. alten Agent-Dienst"
 systemctl stop certbot-agent.service 2>/dev/null || true
 sleep 1
 
-mkdir -p "\$INSTALL_DIR" "\$CONFIG_DIR" "\$DATA_DIR"
+mkdir -p "\$INSTALL_DIR" "\$CONFIG_DIR" "\$DATA_DIR" /usr/local/sbin /usr/local/bin /etc/init.d
 
 echo "==> Lade Agent-Dateien vom Dashboard"
 download "\${API_URL}/agent/agent.py" "\$INSTALL_DIR/agent.py"
 download "\${API_URL}/agent/certbot-agent.service" /etc/systemd/system/certbot-agent.service
-chmod 755 "\$INSTALL_DIR/agent.py"
+download "\${API_URL}/agent/update.sh" "\$INSTALL_DIR/update.sh"
+download "\${API_URL}/agent/certbot-agent-ctl.sh" /usr/local/sbin/certbot-agent
+chmod 755 "\$INSTALL_DIR/agent.py" "\$INSTALL_DIR/update.sh" /usr/local/sbin/certbot-agent
+mkdir -p /etc/init.d /usr/local/bin
+cp -f /usr/local/sbin/certbot-agent /etc/init.d/certbot-agent
+chmod 755 /etc/init.d/certbot-agent
+download "\${API_URL}/agent/service-wrapper.sh" /usr/local/bin/service.new
+if [[ ! -e /usr/local/bin/service ]] || grep -q 'certbot-agent' /usr/local/bin/service 2>/dev/null; then
+  mv -f /usr/local/bin/service.new /usr/local/bin/service
+  chmod 755 /usr/local/bin/service
+else
+  rm -f /usr/local/bin/service.new
+fi
 
 cat > "\$CONFIG_DIR/config.toml" <<EOF
 api_url = "\${API_URL}"
@@ -98,6 +110,7 @@ if [[ "\$ok" -eq 1 ]]; then
   echo "OK: Agent läuft."
   echo "    Dashboard: \${API_URL}"
   echo "    Dienst:    certbot-agent.service"
+  echo "    Befehle:   service certbot-agent status | log | restart | update"
 else
   echo "FEHLER: Agent-Dienst ist nicht aktiv." >&2
   echo "Letzte Logzeilen:" >&2

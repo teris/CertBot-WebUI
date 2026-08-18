@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSession } from "next-auth/react";
 import { StatusBadge } from "@/components/Badges";
+import { agentSupportsRemoteUpdate } from "@/lib/agent-version";
 
 type NodeRow = {
   id: string;
@@ -14,6 +15,7 @@ type NodeRow = {
   lastHeartbeatAt: string | null;
   enrollmentUsed: boolean;
   certificateCount: number;
+  updateAvailable?: boolean;
 };
 
 export default function NodesPage() {
@@ -27,11 +29,14 @@ export default function NodesPage() {
   );
   const [baseUrl, setBaseUrl] = useState("");
   const [error, setError] = useState("");
+  const [latestAgentVersion, setLatestAgentVersion] = useState("");
+  const [bulkMsg, setBulkMsg] = useState("");
 
   async function load() {
     const res = await fetch("/api/nodes");
     const data = await res.json();
     setNodes(data.nodes || []);
+    if (data.latestAgentVersion) setLatestAgentVersion(data.latestAgentVersion);
   }
 
   useEffect(() => {
@@ -72,6 +77,43 @@ export default function NodesPage() {
     await load();
   }
 
+  async function enqueueUpdate(nodeId: string) {
+    setBulkMsg("");
+    const res = await fetch("/api/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nodeId, type: "update", payload: {} }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error || "Update-Job fehlgeschlagen");
+      return;
+    }
+    setBulkMsg("Update-Job angelegt.");
+    await load();
+  }
+
+  async function updateAllRemote() {
+    setError("");
+    setBulkMsg("");
+    const targets = nodes.filter((n) => n.enrollmentUsed && agentSupportsRemoteUpdate(n.agentVersion));
+    if (!targets.length) {
+      setBulkMsg("Kein Agent ab Version 1.3.0 — zuerst update.sh auf den Nodes ausführen.");
+      return;
+    }
+    let ok = 0;
+    for (const n of targets) {
+      const res = await fetch("/api/jobs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nodeId: n.id, type: "update", payload: {} }),
+      });
+      if (res.ok) ok += 1;
+    }
+    setBulkMsg(`${ok} Update-Job(s) in der Warteschlange.`);
+    await load();
+  }
+
   return (
     <div>
       <h1 className="ui-page-title">Nodes</h1>
@@ -83,7 +125,28 @@ export default function NodesPage() {
             Dashboard-URL: <strong className="text-slate-900">{baseUrl}</strong>
           </>
         )}
+        {latestAgentVersion && (
+          <>
+            {" "}
+            Agent-Paket: <strong className="text-slate-900">{latestAgentVersion}</strong>
+          </>
+        )}
       </p>
+
+      {isAdmin && (
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button type="button" className="ui-btn-secondary" onClick={updateAllRemote}>
+            Alle Agents aktualisieren
+          </button>
+          {bulkMsg && <p className="text-sm font-medium text-slate-800">{bulkMsg}</p>}
+        </div>
+      )}
+      {isAdmin && baseUrl && nodes.some((n) => n.enrollmentUsed && !agentSupportsRemoteUpdate(n.agentVersion)) && (
+        <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-slate-900">
+          Agents vor Version 1.3.0 einmalig auf dem Server aktualisieren:
+          <pre className="mt-2 overflow-x-auto rounded bg-slate-900 p-3 text-xs text-slate-100">{`curl -fsSL "${baseUrl.replace(/\/$/, "")}/agent/update.sh" | sudo bash`}</pre>
+        </div>
+      )}
 
       {isAdmin && (
         <form onSubmit={onCreate} className="ui-card mt-6 flex flex-wrap items-end gap-3">
@@ -135,6 +198,7 @@ export default function NodesPage() {
               <th className="px-3 py-2 font-medium">Zertifikate</th>
               <th className="px-3 py-2 font-medium">Letzter Heartbeat</th>
               <th className="px-3 py-2 font-medium">Agent</th>
+              {isAdmin && <th className="px-3 py-2 font-medium"></th>}
             </tr>
           </thead>
           <tbody>
@@ -153,12 +217,32 @@ export default function NodesPage() {
                 <td className="px-3 py-2 ui-muted">
                   {n.lastHeartbeatAt ? new Date(n.lastHeartbeatAt).toLocaleString() : "—"}
                 </td>
-                <td className="px-3 py-2">{n.agentVersion || "—"}</td>
+                <td className="px-3 py-2">
+                  {n.agentVersion || "—"}
+                  {n.updateAvailable && (
+                    <span className="ml-2 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">
+                      Update
+                    </span>
+                  )}
+                </td>
+                {isAdmin && (
+                  <td className="px-3 py-2">
+                    {n.enrollmentUsed && agentSupportsRemoteUpdate(n.agentVersion) && (
+                      <button
+                        type="button"
+                        className="text-xs font-semibold text-sky-800 underline"
+                        onClick={() => enqueueUpdate(n.id)}
+                      >
+                        Aktualisieren
+                      </button>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
             {!nodes.length && (
               <tr>
-                <td colSpan={5} className="px-3 py-6 text-center ui-muted">
+                <td colSpan={isAdmin ? 6 : 5} className="px-3 py-6 text-center ui-muted">
                   Noch keine Nodes.
                 </td>
               </tr>

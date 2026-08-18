@@ -61,3 +61,8 @@ export function agentInstallCommand(baseUrl: string, token: string): string {
     `wget -qO- "${url}/api/public/agent/install?token=${token}" | sudo bash`,
   ].join("\n");
 }
+
+export function agentUpdateCommand(baseUrl: string): string {
+  const url = baseUrl.replace(/\/$/, "");
+  return `curl -fsSL "${url}/agent/update.sh" | sudo bash`;
+}

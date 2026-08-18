@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { StatusBadge } from "@/components/Badges";
 import { parseDomains } from "@/lib/certs";
+import { agentSupportsRemoteUpdate } from "@/lib/agent-version";
 
 export default function NodeDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -17,6 +18,11 @@ export default function NodeDetailPage() {
     name: string;
     hostname: string | null;
     status: string;
+    agentVersion: string | null;
+    enrollmentUsed: boolean;
+    updateAvailable?: boolean;
+    agentLog?: string;
+    lastHeartbeatAt?: string | null;
     certificates: Array<{
       id: string;
       primaryDomain: string;
@@ -27,15 +33,25 @@ export default function NodeDetailPage() {
     jobs: Array<{ id: string; type: string; status: string; createdAt: string }>;
   } | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [latestAgentVersion, setLatestAgentVersion] = useState("");
+  const [jobMsg, setJobMsg] = useState("");
+  const [baseUrl, setBaseUrl] = useState("");
 
   async function load() {
     const res = await fetch(`/api/nodes/${id}`);
     const data = await res.json();
     setNode(data.node);
+    if (data.latestAgentVersion) setLatestAgentVersion(data.latestAgentVersion);
   }
 
   useEffect(() => {
     load();
+    fetch("/api/public-url")
+      .then((r) => r.json())
+      .then((d) => setBaseUrl(d.baseUrl || window.location.origin))
+      .catch(() => setBaseUrl(window.location.origin));
+    const t = setInterval(load, 15000);
+    return () => clearInterval(t);
   }, [id]);
 
   async function rotate() {
@@ -56,7 +72,27 @@ export default function NodeDetailPage() {
     router.push("/nodes");
   }
 
+  async function enqueue(type: "update" | "restart") {
+    setJobMsg("");
+    const res = await fetch("/api/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nodeId: id, type, payload: {} }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setJobMsg(data.error || "Job konnte nicht angelegt werden");
+      return;
+    }
+    setJobMsg(type === "update" ? "Update-Job in der Warteschlange." : "Neustart-Job in der Warteschlange.");
+    await load();
+    if (data.job?.id) router.push(`/jobs/${data.job.id}`);
+  }
+
   if (!node) return <p className="text-sm ui-muted">Laden…</p>;
+
+  const remoteOk = agentSupportsRemoteUpdate(node.agentVersion);
+  const origin = (baseUrl || "").replace(/\/$/, "");
 
   return (
     <div>
@@ -70,6 +106,37 @@ export default function NodeDetailPage() {
         </div>
         <StatusBadge status={node.status} />
       </div>
+
+      <p className="mt-2 text-sm ui-muted">
+        Agent {node.agentVersion || "unbekannt"}
+        {latestAgentVersion ? ` · Dashboard-Paket ${latestAgentVersion}` : ""}
+        {node.updateAvailable ? " · Update verfügbar" : ""}
+      </p>
+
+      {isAdmin && node.enrollmentUsed && (
+        <div className="mt-4 flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => enqueue("update")}
+            className="ui-btn"
+            disabled={!remoteOk}
+            title={remoteOk ? "Update-Job an den Agent senden" : "Zuerst einmalig update.sh auf dem Server ausführen (Agent < 1.3.0)"}
+          >
+            Agent aktualisieren
+          </button>
+          <button type="button" onClick={() => enqueue("restart")} className="ui-btn-secondary" disabled={!remoteOk}>
+            Agent neu starten
+          </button>
+        </div>
+      )}
+      {isAdmin && node.enrollmentUsed && !remoteOk && (
+        <div className="mt-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-slate-900">
+          Dieser Agent ist älter als 1.3.0 und kann noch kein Remote-Update. Einmalig auf dem Server:
+          <pre className="mt-2 overflow-x-auto rounded bg-slate-900 p-3 text-xs text-slate-100">{`curl -fsSL "${origin}/agent/update.sh" | sudo bash`}</pre>
+          Danach funktionieren Update und Neustart hier im Dashboard.
+        </div>
+      )}
+      {jobMsg && <p className="mt-2 text-sm font-medium text-slate-800">{jobMsg}</p>}
 
       {isAdmin && (
         <div className="mt-4 flex gap-2">
@@ -125,6 +192,12 @@ export default function NodeDetailPage() {
           </tbody>
         </table>
       </div>
+
+      <h2 className="mt-8 text-lg font-medium">Agent-Log</h2>
+      <p className="text-xs ui-muted">Letzte Zeilen vom Node (journalctl), aktualisiert mit dem Heartbeat.</p>
+      <pre className="mt-2 max-h-80 overflow-auto rounded bg-slate-900 p-3 text-xs text-slate-100 whitespace-pre-wrap">
+        {node.agentLog?.trim() || "(noch keine Logs — Agent ab 1.3.1 sendet das Journal hierher)"}
+      </pre>
 
       <h2 className="mt-8 text-lg font-medium">Letzte Jobs</h2>
       <ul className="mt-2 space-y-1 text-sm">

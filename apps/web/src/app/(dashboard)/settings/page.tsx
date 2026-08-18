@@ -17,6 +17,7 @@ type Settings = {
   overdueDays: number;
   notifyOnJobFailure: boolean;
   notifyOnNodeOffline: boolean;
+  offlineAfterMinutes: number;
 };
 
 export default function SettingsPage() {
@@ -36,7 +37,10 @@ export default function SettingsPage() {
       fetch("/api/settings")
         .then((r) => r.json())
         .then((d) => {
-          setSettings(d.settings);
+          setSettings({
+            ...d.settings,
+            offlineAfterMinutes: d.settings.offlineAfterMinutes ?? 15,
+          });
           if (d.detectedBaseUrl) setDetectedUrl(d.detectedBaseUrl);
         });
       fetch("/api/public-url")
@@ -192,6 +196,31 @@ export default function SettingsPage() {
           />
           Bei offline Nodes benachrichtigen
         </label>
+        <label className="block text-sm">
+          Offline-Mail nach
+          <select
+            value={settings.offlineAfterMinutes ?? 15}
+            disabled={!settings.notifyOnNodeOffline}
+            onChange={(e) =>
+              setSettings({ ...settings, offlineAfterMinutes: Number(e.target.value) })
+            }
+            className="mt-1 w-full px-3 py-2 text-sm"
+          >
+            <option value={15}>15 Minuten</option>
+            <option value={30}>30 Minuten</option>
+            <option value={45}>45 Minuten</option>
+            <option value={60}>60 Minuten</option>
+          </select>
+        </label>
+        <p className="text-xs ui-muted">
+          Eine Mail, wenn ein zuvor online gemeldeter Agent länger als die gewählte Zeit keinen Heartbeat sendet.
+          Solange er down bleibt, keine weitere Mail. Eine Mail, sobald er sich wieder meldet.
+          Neu angelegte Nodes, die sofort enrollen, lösen keine Mail aus. Siehe{" "}
+          <a href="/notifications" className="underline">
+            Protokoll
+          </a>
+          .
+        </p>
 
         <div className="flex flex-wrap gap-2 pt-2">
           <button type="submit" className="ui-btn">

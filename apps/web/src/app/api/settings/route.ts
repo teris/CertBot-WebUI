@@ -39,6 +39,7 @@ const patchSchema = z.object({
   overdueDays: z.number().int().min(0).max(30).optional(),
   notifyOnJobFailure: z.boolean().optional(),
   notifyOnNodeOffline: z.boolean().optional(),
+  offlineAfterMinutes: z.union([z.literal(15), z.literal(30), z.literal(45), z.literal(60)]).optional(),
 });
 
 export async function PATCH(req: NextRequest) {

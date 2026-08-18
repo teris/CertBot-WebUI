@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { agentInstallCommand, resolvePublicBaseUrl } from "@/lib/base-url";
+import { agentInstallCommand, agentUpdateCommand, resolvePublicBaseUrl } from "@/lib/base-url";
 import { requireSession } from "@/lib/session";
 
 export async function GET(req: NextRequest) {
@@ -10,5 +10,6 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({
     baseUrl,
     installCommand: agentInstallCommand(baseUrl, token),
+    updateCommand: agentUpdateCommand(baseUrl),
   });
 }

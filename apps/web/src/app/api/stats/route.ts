@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { certificateHealth } from "@/lib/certs";
-import { getSettings } from "@/lib/notifications";
+import { getSettings, offlineAfterMs } from "@/lib/notifications";
 
 export async function GET() {
   const session = await getServerSession(authOptions);
@@ -34,7 +34,7 @@ export async function GET() {
     else if (h === "overdue") overdue++;
   }
 
-  const cutoff = new Date(Date.now() - 20 * 60 * 1000);
+  const cutoff = new Date(Date.now() - offlineAfterMs(settings.offlineAfterMinutes));
   const onlineNodes = await prisma.node.count({
     where: { enrollmentUsed: true, lastHeartbeatAt: { gte: cutoff } },
   });

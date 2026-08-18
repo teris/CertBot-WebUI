@@ -7,6 +7,10 @@ if [[ "$(id -u)" -ne 0 ]]; then
 fi
 systemctl disable --now certbot-agent.service 2>/dev/null || true
 rm -f /etc/systemd/system/certbot-agent.service
+rm -f /usr/local/sbin/certbot-agent /etc/init.d/certbot-agent
+if [[ -f /usr/local/bin/service ]] && grep -q 'certbot-agent' /usr/local/bin/service 2>/dev/null; then
+  rm -f /usr/local/bin/service
+fi
 systemctl daemon-reload
 rm -rf /opt/certbot-agent
 rm -rf /etc/certbot-agent

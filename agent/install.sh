@@ -43,6 +43,29 @@ sleep 1
 mkdir -p "$INSTALL_DIR" "$CONFIG_DIR" "$DATA_DIR"
 cp "$SCRIPT_DIR/agent.py" "$INSTALL_DIR/agent.py"
 chmod 755 "$INSTALL_DIR/agent.py"
+if [[ -f "$SCRIPT_DIR/update.sh" ]]; then
+  cp "$SCRIPT_DIR/update.sh" "$INSTALL_DIR/update.sh"
+  chmod 755 "$INSTALL_DIR/update.sh"
+fi
+
+install_cli() {
+  local ctl_src="${SCRIPT_DIR}/certbot-agent-ctl.sh"
+  if [[ ! -f "$ctl_src" ]]; then
+    return 0
+  fi
+  mkdir -p /usr/local/sbin /usr/local/bin /etc/init.d
+  cp "$ctl_src" /usr/local/sbin/certbot-agent
+  chmod 755 /usr/local/sbin/certbot-agent
+  cp /usr/local/sbin/certbot-agent /etc/init.d/certbot-agent
+  chmod 755 /etc/init.d/certbot-agent
+  if [[ -f "$SCRIPT_DIR/service-wrapper.sh" ]]; then
+    if [[ ! -e /usr/local/bin/service ]] || grep -q 'certbot-agent' /usr/local/bin/service 2>/dev/null; then
+      cp "$SCRIPT_DIR/service-wrapper.sh" /usr/local/bin/service
+      chmod 755 /usr/local/bin/service
+    fi
+  fi
+}
+install_cli
 
 cat > "$CONFIG_DIR/config.toml" <<EOF
 api_url = "${API_URL}"
@@ -75,6 +98,7 @@ echo ""
 if [[ "$ok" -eq 1 ]]; then
   echo "OK: Agent läuft."
   echo "    Dashboard: ${API_URL}"
+  echo "    Befehle:   service certbot-agent status | log | restart | update"
 else
   echo "FEHLER: Agent-Dienst ist nicht aktiv." >&2
   journalctl -u certbot-agent.service -n 20 --no-pager >&2 || true

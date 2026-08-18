@@ -17,9 +17,11 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ jobs });
 }
 
+const JOB_TYPES = ["renew", "delete", "add", "update", "restart"] as const;
+
 const createSchema = z.object({
   nodeId: z.string().min(1),
-  type: z.enum(["renew", "delete", "add"]),
+  type: z.enum(JOB_TYPES),
   payload: z.record(z.string(), z.unknown()).default({}),
 });
 
@@ -51,6 +53,19 @@ export async function POST(req: NextRequest) {
         { error: `${parsed.data.type} requires payload.lineageName` },
         { status: 400 }
       );
+    }
+  }
+
+  if (parsed.data.type === "update" || parsed.data.type === "restart") {
+    const existing = await prisma.job.findFirst({
+      where: {
+        nodeId: node.id,
+        type: parsed.data.type,
+        status: { in: ["queued", "running"] },
+      },
+    });
+    if (existing) {
+      return NextResponse.json({ job: existing, reused: true });
     }
   }
 

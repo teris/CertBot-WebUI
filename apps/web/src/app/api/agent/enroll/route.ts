@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
       hostname: parsed.data.hostname || node.hostname,
       agentVersion: parsed.data.agentVersion,
       lastHeartbeatAt: new Date(),
+      offlineAlertSent: false,
     },
   });
 

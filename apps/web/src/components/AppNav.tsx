@@ -9,6 +9,7 @@ const links = [
   { href: "/certificates", label: "Zertifikate" },
   { href: "/nodes", label: "Nodes" },
   { href: "/jobs", label: "Jobs" },
+  { href: "/notifications", label: "Protokoll" },
   { href: "/users", label: "Benutzer", admin: true },
   { href: "/settings", label: "Einstellungen", admin: true },
 ];

@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-VERSION = "1.3.2"
+VERSION = "1.3.3"
 logger = logging.getLogger("certbot-agent")
 
 _SSL_CTX = ssl.create_default_context()
@@ -743,6 +743,7 @@ def report_inventory(client: AgentClient, store: LocalStore, cfg: dict[str, Any]
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="CertBot WebUI Agent (SQLite, stdlib-only)")
+    parser.add_argument("--version", action="version", version=f"certbot-agent {VERSION}")
     parser.add_argument("--config", default=os.environ.get("CERTBOT_AGENT_CONFIG", "/etc/certbot-agent/config.toml"))
     parser.add_argument("--once", action="store_true", help="Run one inventory + job poll then exit")
     parser.add_argument("--enroll-only", action="store_true")

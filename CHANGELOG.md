@@ -4,7 +4,21 @@ All notable changes to CertBot WebUI are documented here.
 Alle wesentlichen Änderungen an CertBot WebUI werden hier festgehalten.
 
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)  
-Versioning: Agent `VERSION` (currently **1.3.2**).
+Versioning: Agent `VERSION` (currently **1.3.3**).
+
+---
+
+## [1.3.3] — 2026-08-18
+
+### English
+
+#### Added
+- `service certbot-agent version` (also `certbot-agent version` / `-V` / `--version`)
+
+### Deutsch
+
+#### Hinzugefügt
+- `service certbot-agent version` (auch `certbot-agent version` / `-V` / `--version`)
 
 ---
 

@@ -1,4 +1,4 @@
-export const BUNDLED_AGENT_VERSION = "1.3.2";
+export const BUNDLED_AGENT_VERSION = "1.3.3";
 export const MIN_REMOTE_UPDATE_VERSION = "1.3.0";
 
 /** Compare dotted versions; true if current is older than latest. */

@@ -159,12 +159,13 @@ Die öffentliche URL kommt aus **Einstellungen → Öffentliche Dashboard-URL** 
 
 ```bash
 sudo service certbot-agent status     # Zustand + Version
+sudo service certbot-agent version    # nur Versionsnummer
 sudo service certbot-agent log        # letzte 20 Logzeilen
 sudo service certbot-agent restart
 sudo service certbot-agent update     # Dateien vom Dashboard neu laden
 ```
 
-Gleichwertig: `certbot-agent status|log|restart|update`
+Gleichwertig: `certbot-agent status|version|log|restart|update`
 
 ### Agent aktualisieren
 

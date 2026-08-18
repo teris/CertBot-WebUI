@@ -74,7 +74,9 @@ cmd_log() {
   journalctl -u "$UNIT" -n "$n" --no-pager -l || true
 }
 
-cmd_restart() {
+cmd_version() {
+  echo "certbot-agent $(agent_version)"
+}
   need_root "$@"
   systemctl restart "$UNIT"
   echo "Agent neu gestartet."
@@ -119,6 +121,7 @@ CertBot WebUI Agent
 
 Nutzung:
   certbot-agent status
+  certbot-agent version
   certbot-agent log [Anzahl]
   certbot-agent restart
   certbot-agent start
@@ -127,6 +130,7 @@ Nutzung:
 
 Gleichwertig (init-Skript):
   service certbot-agent status
+  service certbot-agent version
   service certbot-agent log
   service certbot-agent restart
   service certbot-agent update
@@ -138,6 +142,7 @@ EOF
 action="${1:-status}"
 case "$action" in
   status) cmd_status ;;
+  version|--version|-V) cmd_version ;;
   log|logs) cmd_log "$@" ;;
   restart) cmd_restart "$@" ;;
   start) cmd_start "$@" ;;

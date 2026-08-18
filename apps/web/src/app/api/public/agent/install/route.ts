@@ -110,7 +110,7 @@ if [[ "\$ok" -eq 1 ]]; then
   echo "OK: Agent läuft."
   echo "    Dashboard: \${API_URL}"
   echo "    Dienst:    certbot-agent.service"
-  echo "    Befehle:   service certbot-agent status | log | restart | update"
+  echo "    Befehle:   service certbot-agent status | version | log | restart | update"
 else
   echo "FEHLER: Agent-Dienst ist nicht aktiv." >&2
   echo "Letzte Logzeilen:" >&2

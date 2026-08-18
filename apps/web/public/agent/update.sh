@@ -96,7 +96,7 @@ done
 echo ""
 if [[ "$ok" -eq 1 ]]; then
   echo "OK: Agent ${NEW_VER} läuft."
-  echo "    Befehle: service certbot-agent status | log | restart | update"
+  echo "    Befehle: service certbot-agent status | version | log | restart | update"
 else
   echo "FEHLER: Agent-Dienst ist nicht aktiv." >&2
   journalctl -u certbot-agent.service -n 20 --no-pager >&2 || true
